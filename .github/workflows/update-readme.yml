@@ -1,0 +1,89 @@
+name: Update Profile README with LeetCode Progress
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # Run daily at 9 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout LeetCode repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 10  # Get last 10 commits
+        
+    - name: Checkout profile repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.actor }}/${{ github.actor }}
+        token: ${{ secrets.PROFILE_README_TOKEN }}
+        path: profile-repo
+        
+    - name: Get recent commits
+      id: commits
+      run: |
+        cd $GITHUB_WORKSPACE
+        
+        # Get last 5 commits with problem names
+        commits=$(git log --oneline -5 --pretty=format:"%ad %s" --date=short | grep -E "(Add|Solve|Complete)" || echo "")
+        
+        # Format commits for README
+        echo "RECENT_COMMITS<<EOF" >> $GITHUB_OUTPUT
+        echo "$commits" | while IFS= read -r line; do
+          if [[ -n "$line" ]]; then
+            date=$(echo "$line" | cut -d' ' -f1)
+            message=$(echo "$line" | cut -d' ' -f2-)
+            echo "- [$date] $message"
+          fi
+        done >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Update Profile README
+      run: |
+        cd profile-repo
+        
+        # Backup original README
+        cp README.md README.md.bak
+        
+        # Create temp file with LeetCode section
+        cat > leetcode_section.md << 'EOF'
+        ## 📈 Latest LeetCode Progress
+        ${{ steps.commits.outputs.RECENT_COMMITS }}
+        
+        *Last updated: $(date +'%Y-%m-%d %H:%M UTC')*
+        
+        [View full progress →](https://github.com/${{ github.actor }}/leetcode-daily)
+        EOF
+        
+        # Check if LeetCode section exists and update README
+        if grep -q "## 📈 Latest LeetCode Progress" README.md; then
+          # Remove existing section and add new one
+          sed -i '/## 📈 Latest LeetCode Progress/,/^\[View full progress/d' README.md
+          cat leetcode_section.md >> README.md
+        else
+          # Add new section at the end
+          echo "" >> README.md
+          cat leetcode_section.md >> README.md
+        fi
+        
+        rm leetcode_section.md
+        
+    - name: Commit and push changes
+      run: |
+        cd profile-repo
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        if git diff --quiet; then
+          echo "No changes to commit"
+        else
+          git add README.md
+          git commit -m "Update LeetCode progress from leetcode-daily repo"
+          git push
+        fi
