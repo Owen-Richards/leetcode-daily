@@ -93,5 +93,5 @@ Traverse both linked lists simultaneously, adding corresponding digits along wit
 - [x] Python
 - [x] JavaScript
 - [x] Java
-- [ ] C++
-- [ ] Rust
+- [x] C++
+- [x] Rust
